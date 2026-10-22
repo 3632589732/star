@@ -271,8 +271,23 @@
   .wish-list::-webkit-scrollbar-thumb { background:rgba(120,165,255,.3); border-radius:4px; }
   .wish-item { padding:12px 16px; border-radius:14px; background:rgba(255,255,255,.035); border:1px solid rgba(140,175,255,.1); margin-bottom:8px; transition:background .25s ease,border-color .25s ease; }
   .wish-item:hover { background:rgba(255,255,255,.06); border-color:rgba(140,175,255,.2); }
+  .wish-item-nick { font-size: 11.5px; color: rgba(160, 195, 240, 0.9); font-weight: 600; letter-spacing: .3px; margin-bottom: 4px; }
   .wish-item-text { font-size:14px; color:#e0ecff; line-height:1.6; word-break:break-all; }
-  .wish-item-time { font-size:11px; color:rgba(150,170,210,.5); margin-top:5px; }
+  .wish-item-time { font-size:11px; color:rgba(150,170,210,.5); margin-top:5px; display: flex; justify-content: space-between; align-items: center; }
+  .wish-item-actions { display: flex; gap: 12px; font-size: 12px; color: #7aa7ff; }
+  .wish-item-actions span { cursor: pointer; user-select: none; }
+  .wish-item-actions span:hover { text-decoration: underline; }
+  
+  /* 全新设计的回复大框 */
+  .wish-replies-wrap { display: none; margin-top: 10px; }
+  .wish-replies-box { background: rgba(0,0,0,0.3); border: 1px solid rgba(140,175,255,0.15); border-radius: 10px; padding: 10px 12px; }
+  .wish-replies-title { font-size: 11.5px; color: rgba(140,175,255,0.8); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed rgba(140,175,255,0.2); }
+  .wish-reply { font-size: 13px; color: rgba(200,215,240,.9); line-height: 1.5; margin-bottom: 8px; word-break: break-word; }
+  .wish-reply:last-child { margin-bottom: 0; }
+  .wish-reply .r-user { color: #a8e6cf; font-weight: 600; }
+  .wish-reply .r-action { color: rgba(160,180,215,.6); margin: 0 4px; }
+  .wish-reply .r-target { color: #ffd76a; font-weight: 600; }
+
   .wish-list-empty { text-align:center; padding:40px 20px; color:rgba(150,170,210,.5); font-size:13px; letter-spacing:1px; line-height:1.8; }
   .wish-list-loading { text-align:center; padding:40px 20px; color:rgba(150,170,210,.6); font-size:13px; letter-spacing:1px; }
   .wish-list-loading::after { content:''; display:inline-block; width:14px; height:14px; margin-left:8px; border:2px solid rgba(120,165,255,.3); border-top-color:#7aa7ff; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; }
@@ -441,6 +456,7 @@
     .wish-list { max-height: 160px; margin-bottom: 10px; }
     .wish-item { padding: 8px 10px; margin-bottom: 6px; border-radius: 10px; }
     .wish-item-text { font-size: 12px; }
+    .wish-item-nick { font-size: 10.5px; margin-bottom: 3px; }
     .wish-item-time { font-size: 10px; margin-top: 3px; }
     .wish-list-empty, .wish-list-loading { padding: 20px 16px; font-size: 12px; }
     .viewer-tab-btn { padding: 6px 10px; font-size: 11px; margin-bottom: 8px; border-radius: 10px; }
@@ -610,6 +626,7 @@
   #simpleView .sv-audio-row{display:flex;align-items:center;justify-content:space-between;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.16);background:rgba(255,255,255,0.07);margin-bottom:16px;font-size:14px;}
   #simpleView .sv-audio-row button{padding:8px 14px;border-radius:999px;border:none;background:rgba(255,255,255,0.2);color:#fff;font-size:13px;cursor:pointer;font-family:inherit;}
   #simpleView .sv-audio-row button:hover{background:rgba(255,255,255,0.35)}
+  #simpleView .sv-reply-btn{font-size:12px; color:#8fb4ff; cursor:pointer; margin-left:8px;}
 </style>
 </head>
 <body>
@@ -1038,11 +1055,17 @@
 <script>
 (function () {
   'use strict';
-  const API_BASE = 'https://yunju.99kpk.top/API/';
-  const APPID = '2153', APPKEY = '1790001700';
+  // 新帖子接口配置
+  const LT_API = 'https://yuju.99kpk.top:81/lt/';
+  const ADMIN_USER = '3632589732';
+  const POST_IDS = {
+    'public': '1792574971',
+    'secret': '1792574987',
+    'feedback': '1792574998'
+  };
+  
   const NOTICE_API = 'https://yuju.99kpk.top:81/api/notice_obtain.php';
   const NOTICE_USER = '3632589732';
-  const PREFIX_SECRET = '秘密许愿', PREFIX_FEEDBACK = '反馈';
   const GD_API = 'https://music-api.gdstudio.xyz/api.php';
   const GD_SOURCE = 'netease';
   const GD_LIMIT_MSG = '在线音乐接口访问受限，请稍后再试。';
@@ -1053,66 +1076,135 @@
 
   function getTimeString() { const d = new Date(); const pad = n => (n < 10 ? '0' + n : '' + n); return '' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()); }
   function formatTime(str) { if (!str) return ''; const s = String(str).replace(/\D/g, ''); if (s.length >= 14) return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8)+' '+s.slice(8,10)+':'+s.slice(10,12)+':'+s.slice(12,14); return String(str); }
-  function fetchWithTimeout(url, timeout) { return new Promise((resolve, reject) => { const controller = new AbortController(); const timer = setTimeout(() => { try { controller.abort(); } catch (e) {} reject(new Error('TIMEOUT')); }, timeout || 8000); fetch(url, { signal: controller.signal }).then(res => { clearTimeout(timer); resolve(res); }).catch(err => { clearTimeout(timer); reject(err); }); }); }
-
-// 无签名标题：公开 => 时间，秘密 => "秘密许愿时间"，反馈 => "反馈时间"
-function buildWishTitle(type, content) {
-  const time = getTimeString();
-  if (type === 'secret') return { title: PREFIX_SECRET + time, time, prefix: PREFIX_SECRET };
-  if (type === 'feedback') return { title: PREFIX_FEEDBACK + time, time, prefix: PREFIX_FEEDBACK };
-  return { title: time, time, prefix: '' };
-}
-function parseWishTitle(title, content) {
-  const raw = String(title || '');
-
-  // 兼容旧格式：秘密许愿#时间 / 反馈#时间 / 时间
-  if (raw.indexOf('#') !== -1) {
-    const parts = raw.split('#');
-    if (parts.length >= 3) {
-      const prefix = parts[0];
-      if (prefix.indexOf(PREFIX_SECRET) === 0) return { type: 'secret', time: parts[2] };
-      if (prefix.indexOf(PREFIX_FEEDBACK) === 0) return { type: 'feedback', time: parts[2] };
-      return { type: 'public', time: parts[2] };
-    }
-    if (parts.length >= 2) {
-      const prefix = parts[0];
-      if (prefix.indexOf(PREFIX_SECRET) === 0) return { type: 'secret', time: parts[1] };
-      if (prefix.indexOf(PREFIX_FEEDBACK) === 0) return { type: 'feedback', time: parts[1] };
-      return { type: 'public', time: parts[1] };
-    }
+  function fetchWithTimeout(url, options, timeout) { 
+    return new Promise((resolve, reject) => { 
+      const controller = new AbortController(); 
+      const timer = setTimeout(() => { 
+        try { controller.abort(); } catch (e) {} 
+        reject(new Error('TIMEOUT')); 
+      }, timeout || 8000); 
+      fetch(url, { signal: controller.signal, ...options }).then(res => { 
+        clearTimeout(timer); 
+        resolve(res); 
+      }).catch(err => { 
+        clearTimeout(timer); 
+        reject(err); 
+      }); 
+    }); 
   }
 
-  // 新格式：秘密许愿20261019123456 / 反馈20261019123456 / 20261019123456
-  if (raw.indexOf(PREFIX_SECRET) === 0) return { type: 'secret', time: raw.slice(PREFIX_SECRET.length) };
-  if (raw.indexOf(PREFIX_FEEDBACK) === 0) return { type: 'feedback', time: raw.slice(PREFIX_FEEDBACK.length) };
-  return { type: 'public', time: raw };
-}
-  // 提交许愿：HTTP 失败或接口明确返回失败都抛错，确保离线缓存不会被误删
+  // 核心：强化时间解析，确保倒序排序生效
+  function getTimeValue(item) {
+    if (!item) return 0;
+    let t = item.time || item.createtime || item.created_at || item.date || item.addtime || item.posttime || item.inserttime;
+    if (t) {
+      let s = String(t).trim();
+      if (/^\d+$/.test(s)) {
+        if (s.length >= 14) {
+          return new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12), +s.slice(12,14)).getTime();
+        } else if (s.length === 10) {
+          return Number(s) * 1000;
+        } else if (s.length === 13) {
+          return Number(s);
+        }
+        return Number(s);
+      }
+      let parsed = Date.parse(s.replace(/-/g, '/'));
+      if (!isNaN(parsed)) return parsed;
+    }
+    
+    // 如果没有时间或解析失败，使用 ID 作为备用排序依据（假设自增）
+    let idStr = String(item.id || item.comment_id || item.cid || '');
+    if (/^\d+$/.test(idStr)) {
+      return Number(idStr); 
+    }
+    let num = idStr.replace(/\D/g, '');
+    if (num) return Number(num);
+    
+    return 0;
+  }
+
+  // 提交许愿：改为发送评论到对应的帖子
   async function apiSubmitWish(content, type) {
-    const { title } = buildWishTitle(type, content);
-    const qs = new URLSearchParams({ appid: APPID, key: APPKEY, title, content });
-    const res = await fetchWithTimeout(API_BASE + 'wd_establish.php?' + qs.toString(), 8000);
+    const postId = POST_IDS[type] || POST_IDS.public;
+    let nickname = '许愿者';
+    if (type === 'feedback') nickname = '反馈者';
+    
+    const qs = new URLSearchParams({
+      user: ADMIN_USER,
+      post_id: postId,
+      qq: '10000',
+      nickname: nickname,
+      content: content
+    });
+    
+    const res = await fetchWithTimeout(LT_API + 'Comment.php', { method: 'POST', body: qs }, 8000);
     if (!res.ok) throw new Error('HTTP_' + res.status);
+    
     let json = null;
     try { json = await res.json(); } catch (e) { throw new Error('BAD_JSON'); }
     if (json && typeof json === 'object') {
       if (json.code !== undefined) {
         const c = Number(json.code);
         if (c !== 0 && c !== 1 && c !== 200) throw new Error('API_CODE_' + c);
-      } else if (json.success !== undefined) {
-        if (!json.success) throw new Error('API_FAIL');
-      } else if (json.status !== undefined) {
-        const s = Number(json.status);
-        if (s !== 0 && s !== 1 && s !== 200) throw new Error('API_STATUS_' + s);
       }
     }
     return json;
   }
-  async function apiGetWishes() { const qs = new URLSearchParams({ appid: APPID, key: APPKEY }); const res = await fetchWithTimeout(API_BASE + 'wd_list.php?' + qs.toString(), 8000); return res.json(); }
-  async function apiGetNotice() { const qs = new URLSearchParams({ user: NOTICE_USER, appid: APPID }); const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), 1500); try { const res = await fetch(NOTICE_API + '?' + qs.toString(), { signal: controller.signal }); clearTimeout(timeoutId); return res.json(); } catch (e) { clearTimeout(timeoutId); throw e; } }
+
+  // 提交回复
+  async function apiSubmitReply(postId, commentId, content) {
+    const qs = new URLSearchParams({
+      user: ADMIN_USER,
+      post_id: postId,
+      comment_id: commentId,
+      qq: '10000',
+      nickname: '陌生人',
+      content: content
+    });
+    const res = await fetchWithTimeout(LT_API + 'CommentReply.php', { method: 'POST', body: qs }, 8000);
+    if (!res.ok) throw new Error('HTTP_' + res.status);
+    return res.json();
+  }
+
+  // 获取许愿列表：改为拉取对应帖子的评论列表
+  async function apiGetWishes(type) {
+    type = type || 'public';
+    const postId = POST_IDS[type] || POST_IDS.public;
+    const qs = new URLSearchParams({ user: ADMIN_USER, post_id: postId });
+    const res = await fetchWithTimeout(LT_API + 'CommentList.php?' + qs.toString(), {}, 8000);
+    if (!res.ok) throw new Error('HTTP_' + res.status);
+    
+    const json = await res.json();
+    let list = [];
+    if (Array.isArray(json.data)) list = json.data;
+    else if (Array.isArray(json.list)) list = json.list;
+    else if (Array.isArray(json)) list = json;
+    
+    // 拿到数据立刻按时间降序排序（越晚发布越在上面）
+    list.sort((a, b) => {
+        let tA = getTimeValue(a);
+        let tB = getTimeValue(b);
+        if (tA === tB) return String(b.id || b.comment_id).localeCompare(String(a.id || a.comment_id));
+        return tB - tA;
+    });
+    return list;
+  }
+
+  async function apiGetNotice() { const qs = new URLSearchParams({ user: NOTICE_USER, appid: '2153' }); const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), 1500); try { const res = await fetch(NOTICE_API + '?' + qs.toString(), { signal: controller.signal }); clearTimeout(timeoutId); return res.json(); } catch (e) { clearTimeout(timeoutId); throw e; } }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  /* 离线愿望：断网/服务器异常时缓存，下次点击按钮或重新访问时按时间从早到晚串行补传 */
+  // 判断是否是一级许愿（父级愿望），用于点击流星只显示公开父回复
+  function isTopLevelWish(item) {
+    if (!item) return false;
+    const content = item.content || item.text || item.msg || '';
+    if (String(content).trim() === '') return false;
+    let pid = String(item.parent_id || item.pid || item.reply_id || item.reply_to || item.parent || '0');
+    if (pid === 'undefined' || pid === 'null' || pid === '') pid = '0';
+    return pid === '0';
+  }
+
+  /* 离线愿望缓存 */
   const OFFLINE_WISH_KEY = 'meteor_offline_wishes_v1';
   const OFFLINE_WISH_BACKUP_KEY = 'meteor_offline_wishes_v1_corrupt';
   const OFFLINE_WISH_MAX = 50, OFFLINE_UPLOAD_INTERVAL = 300;
@@ -1138,21 +1230,17 @@ function parseWishTitle(title, content) {
     for (let i = 0; i < arr.length && out.length < OFFLINE_WISH_MAX; i++) {
       const it = arr[i];
       if (!it || typeof it.text !== 'string' || !it.text) continue;
-      out.push({ id: it.id || genOfflineId(), text: it.text, type: it.type === 'public' ? 'public' : 'secret', ts: typeof it.ts === 'number' ? it.ts : Date.now() });
+      out.push({ id: it.id || genOfflineId(), text: it.text, type: it.type || 'secret', ts: typeof it.ts === 'number' ? it.ts : Date.now() });
     }
-    // 按入队时间从早到晚排序，保证补传顺序与许愿先后一致
     out.sort(function (a, b) { return a.ts - b.ts; });
     return out;
   }
   function writeOfflineWishes(list) { try { const arr = Array.isArray(list) ? list.slice(-OFFLINE_WISH_MAX) : []; localStorage.setItem(OFFLINE_WISH_KEY, JSON.stringify(arr)); } catch (e) {} }
-  function hasOfflineWishes() {
-    try { const raw = localStorage.getItem(OFFLINE_WISH_KEY); return !!raw && raw !== '[]' && raw !== 'null'; } catch (e) { return false; }
-  }
   function enqueueOfflineWish(text, type) {
     const t = String(text || '').trim(); if (!t) return null;
     const list = readOfflineWishes();
     if (list.length >= OFFLINE_WISH_MAX) showToastOnce('offlineFull', '离线愿望缓存已满，最早的一条将被覆盖', 5000);
-    const item = { id: genOfflineId(), text: t, type: type === 'public' ? 'public' : 'secret', ts: Date.now() };
+    const item = { id: genOfflineId(), text: t, type: type || 'secret', ts: Date.now() };
     list.push(item);
     while (list.length > OFFLINE_WISH_MAX) list.shift();
     writeOfflineWishes(list);
@@ -1184,10 +1272,9 @@ function parseWishTitle(title, content) {
       offlineFlushStarted = false;
     }
   }
-  // 统一许愿入口：先入队防丢，在线成功即移除；失败保留，等下次点击按钮/重访页面再补传
   function submitWishWithOffline(text, type) {
     const t = String(text || '').trim();
-    const ty = (type === 'public') ? 'public' : 'secret';
+    const ty = (type === 'public') ? 'public' : (type === 'feedback' ? 'feedback' : 'secret');
     if (!t) return Promise.resolve(false);
     const offlineId = enqueueOfflineWish(t, ty);
     return apiSubmitWish(t, ty).then(function () {
@@ -1199,7 +1286,7 @@ function parseWishTitle(title, content) {
     });
   }
 
-  /* Toast（不丢弃，仅合并去重） */
+  /* Toast */
   let simpleToastEl = null; const toastQueue = [];
   const TOAST_DEDUP_MS = 1200, TOAST_DISPLAY_MS = 1100;
   let toastBusy = false, lastToastMsg = '', lastToastAt = 0;
@@ -1510,7 +1597,6 @@ function parseWishTitle(title, content) {
   let BASE_ANGLE_DEG = 20; let BASE_ANGLE = BASE_ANGLE_DEG * Math.PI / 180;
   let TRAIL_LEN = 22; let speedFactor = 1.0; let randomJitter = false; let meteorDensity = 30;
   const BASE_SPEED = 5.0, TRAIL_SAMPLE_INTERVAL = 2.0;
-  // 抛物线重力随倾斜角度变化：角度越大，下落弧线越明显
   let PARABOLA_GRAVITY = 0.012, PARABOLA_MAX_VY = 2.5;
   function updateParabolaParams() {
     const t = clamp((BASE_ANGLE_DEG - 5) / 50, 0, 1);
@@ -1560,19 +1646,10 @@ function parseWishTitle(title, content) {
     (async function () {
       let result = false;
       try {
-        const res = await apiGetWishes();
+        const list = await apiGetWishes('public');
         if (mySeq !== wishPoolSeq || myVer !== wishPoolVersion) { result = false; return; }
-        let list = [];
-        if (Array.isArray(res.list)) list = res.list;
-        else if (Array.isArray(res.data)) list = res.data;
-        else if (Array.isArray(res)) list = res;
-        wishPool = list.filter(function (item) {
-          const content = item.content || item.text || item.msg || '';
-          const parsed = parseWishTitle(item.title || item.name || '', content);
-          if (parsed.type === 'secret') return false;
-          if (parsed.type === 'feedback') return false;
-          return true;
-        });
+        // 只保留公开的一级愿望（父回复），隐藏所有子回复
+        wishPool = list.filter(isTopLevelWish);
         result = true;
       } catch (e) { result = false; }
       finally {
@@ -1584,7 +1661,14 @@ function parseWishTitle(title, content) {
     return p;
   }
   function invalidateWishPool() { wishPoolVersion++; wishPool = []; wishPoolLoading = false; wishPoolLoadingPromise = null; if (clickMeteorEnabled) loadWishPool(true); }
-  function pickRandomWish() { if (!wishPool.length) return null; const item = wishPool[Math.floor(Math.random() * wishPool.length)]; return { text: item.content || item.text || item.msg || '', time: formatTime(item.time || item.modify || item.createtime || '') }; }
+  function pickRandomWish() { 
+    if (!wishPool.length) return null; 
+    const item = wishPool[Math.floor(Math.random() * wishPool.length)]; 
+    return { 
+      text: item.content || item.text || item.msg || '', 
+      time: formatTime(item.time || item.createtime || item.created_at || '') 
+    }; 
+  }
 
   function layoutBubble() {
     if (!bubbleAnchor) return;
@@ -2072,7 +2156,6 @@ function parseWishTitle(title, content) {
   let flyCooling = false, pendingWishText = '';
 
   function requestWish() {
-    // 每次点击“放飞”时，先检查本地缓存并尝试补传
     try { flushOfflineWishesOnce(); } catch (e) {}
     if (flyCooling || isAutoTyping) return;
     if (wishChoiceMask.classList.contains('show')) return;
@@ -2081,7 +2164,6 @@ function parseWishTitle(title, content) {
     if (!text) { input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake'); input.focus(); return; }
     pendingWishText = text;
     input.blur(); panel.classList.remove('focused');
-    // 录视频模式：直接按进入前选择的许愿方式放飞，不再弹选择框，直到退出录视频模式
     if (recordMode) {
       executeWish(recordDefaultIsPublic);
       return;
@@ -2154,31 +2236,29 @@ function parseWishTitle(title, content) {
   function closeFeedback() { feedbackMask.classList.remove('show'); feedbackInput.value = ''; feedbackCounter.textContent = '0 / 200'; }
   feedbackOpenBtn.addEventListener('click', openFeedback);
   feedbackInput.addEventListener('input', function () {
-  const original = this.value;
-  // 反馈禁止输入圆括号（半角/全角）
-  const noBracket = original.replace(/[()（）]/g, '');
-  const filtered = filterInput(noBracket).slice(0, 200);
-  if (filtered !== original) {
-    const selStart = this.selectionStart;
-    let removedBefore = 0;
-    for (let i = 0; i < selStart; i++) {
-      const ch = original[i];
-      if (!isAllowedChar(ch) || /[()（）]/.test(ch)) removedBefore++;
+    const original = this.value;
+    const noBracket = original.replace(/[()（）]/g, '');
+    const filtered = filterInput(noBracket).slice(0, 200);
+    if (filtered !== original) {
+      const selStart = this.selectionStart;
+      let removedBefore = 0;
+      for (let i = 0; i < selStart; i++) {
+        const ch = original[i];
+        if (!isAllowedChar(ch) || /[()（）]/.test(ch)) removedBefore++;
+      }
+      const newPos = Math.max(0, selStart - removedBefore);
+      this.value = filtered; safeSetCursor(this, newPos);
     }
-    const newPos = Math.max(0, selStart - removedBefore);
-    this.value = filtered; safeSetCursor(this, newPos);
-  }
-  feedbackCounter.textContent = this.value.length + ' / 200';
-});
+    feedbackCounter.textContent = this.value.length + ' / 200';
+  });
   feedbackCancel.addEventListener('click', closeFeedback);
-async function submitFeedback() {
-  if (feedbackSubmitting) return;
-  // 双保险：提交前去掉括号
-  feedbackInput.value = feedbackInput.value.replace(/[()（）]/g, '');
-  const raw = feedbackInput.value.trim();
+  async function submitFeedback() {
+    if (feedbackSubmitting) return;
+    feedbackInput.value = feedbackInput.value.replace(/[()（）]/g, '');
+    const raw = feedbackInput.value.trim();
     if (!raw) { feedbackInput.classList.remove('shake'); void feedbackInput.offsetWidth; feedbackInput.classList.add('shake'); feedbackInput.focus(); return; }
     feedbackSubmitting = true; feedbackSubmit.classList.add('cooldown');
-    try { await apiSubmitWish(raw, 'feedback'); closeFeedback(); showToast('感谢你的反馈，已收到！'); }
+    try { await submitWishWithOffline(raw, 'feedback'); closeFeedback(); showToast('感谢你的反馈，已收到！'); }
     catch (e) {}
     finally { feedbackSubmitting = false; feedbackSubmit.classList.remove('cooldown'); }
   }
@@ -2329,12 +2409,6 @@ async function submitFeedback() {
   function angleLabel(v) { if (v <= 15) return '平缓'; if (v <= 30) return '柔和'; if (v <= 45) return '自然'; return '陡峭'; }
   function densityLabel(v) { if (v <= 20) return '极少'; if (v <= 40) return '少'; if (v <= 60) return '适中'; if (v <= 80) return '多'; return '极多'; }
 
-  /**
-   * 倾斜角度实时预览（修复版）
-   * - 按容器真实像素尺寸绘制，角度与实际流星 1:1 对应
-   * - 开启"抛物线弯曲轨迹"后，预览同样按重力弯曲
-   * - 曲线从右上（尾巴）到左下（头部），头部亮点跟随
-   */
   let anglePreviewRaf = null;
   function scheduleAnglePreview() {
     if (anglePreviewRaf) return;
@@ -2348,12 +2422,10 @@ async function submitFeedback() {
     const svg = angleLine.ownerSVGElement;
     if (!svg) return;
 
-    // 用布局尺寸（不受 modal 的 scale 变换影响）
     let pw = svg.clientWidth;
     let ph = svg.clientHeight;
     if (!pw || !ph) { pw = 300; ph = 46; }
 
-    // 让 viewBox 与真实像素一致，保证角度不被拉伸
     svg.setAttribute('viewBox', '0 0 ' + pw + ' ' + ph);
     svg.setAttribute('preserveAspectRatio', 'none');
 
@@ -2362,7 +2434,6 @@ async function submitFeedback() {
     const sinA = Math.sin(rad);
     const tn = clamp((deg - 5) / 50, 0, 1);
 
-    // 抛物线弯曲量（开启时随角度增大而更明显）
     let bend = 0;
     if (randomJitter) bend = sinA * (0.25 + 0.35 * tn);
 
@@ -2370,13 +2441,12 @@ async function submitFeedback() {
     const availW = Math.max(10, pw - pad * 2);
     const availH = Math.max(8, ph - pad * 2);
 
-    // 轨迹包围盒（单位长度）
-    const xSpan = cosA;          // > 0
-    const ySpan = sinA + bend;   // > 0
+    const xSpan = cosA;
+    const ySpan = sinA + bend;
 
     const scale = Math.min(availW / xSpan, availH / ySpan);
-    const originX = pw - pad;                                   // 尾巴在右侧
-    const offsetY = pad + (availH - ySpan * scale) / 2;         // 垂直居中
+    const originX = pw - pad;
+    const offsetY = pad + (availH - ySpan * scale) / 2;
 
     const N = 32;
     let d = '';
@@ -2391,7 +2461,6 @@ async function submitFeedback() {
     }
     angleLine.setAttribute('d', d);
 
-    // 头部亮点
     angleDot.setAttribute('cx', headX.toFixed(2));
     angleDot.setAttribute('cy', headY.toFixed(2));
     if (angleDotRing) {
@@ -2492,10 +2561,57 @@ async function submitFeedback() {
   let viewerSource = [], viewerCursor = 0;
   const VIEWER_PAGE = 30;
   let viewerRenderToken = 0;
+
+  function buildCommentTree(list) {
+    const roots = [];
+    const map = {};
+    
+    const flatList = [];
+    function flatten(arr) {
+      arr.forEach(item => {
+        flatList.push(item);
+        const nested = item.replies || item.reply || item.children;
+        if (Array.isArray(nested) && nested.length > 0) {
+          flatten(nested);
+        }
+      });
+    }
+    flatten(list);
+
+    flatList.forEach(item => {
+      const cid = item.id || item.comment_id || item.cid;
+      item._id = String(cid);
+      let pid = String(item.parent_id || item.pid || item.reply_id || item.reply_to || item.parent || '0');
+      if (pid === 'undefined' || pid === 'null') pid = '0';
+      item._pid = pid;
+      item._replies = [];
+      map[item._id] = item;
+    });
+
+    flatList.forEach(item => {
+      if (item._pid !== '0' && item._pid !== '' && map[item._pid]) {
+        map[item._pid]._replies.push(item);
+      } else {
+        roots.push(item);
+      }
+    });
+    
+    // 按时间降序排序主贴（越晚发布越在上面）
+    roots.sort((a, b) => {
+        let tA = getTimeValue(a);
+        let tB = getTimeValue(b);
+        if (tA === tB) return String(b._id).localeCompare(String(a._id));
+        return tB - tA;
+    });
+    
+    return roots;
+  }
+
   function updateViewerHeader() {
     if (viewerMode === 'wish') { viewerTitle.textContent = '✦ 大 家 的 许 愿 ✦'; viewerSub.textContent = '看看别人许下了什么'; viewerTabText.textContent = '想让作者添加额外功能的列表'; }
     else { viewerTitle.textContent = '✦ 大 家 的 建 议 ✦'; viewerSub.textContent = '想让作者添加的额外功能'; viewerTabText.textContent = '返回许愿池'; }
   }
+
   function appendViewerChunk() {
     if (viewerCursor >= viewerSource.length) return;
     const myToken = viewerRenderToken;
@@ -2504,25 +2620,66 @@ async function submitFeedback() {
     for (; viewerCursor < end; viewerCursor++) {
       if (viewerCursor >= viewerSource.length) break;
       const item = viewerSource[viewerCursor];
+      const cid = item._id;
+      const content = item.content || item.text || item.msg || '';
+      const time = formatTime(item.time || item.createtime || item.created_at || '');
+      const replies = item._replies || [];
+      const nick = item.nickname || '匿名';
+      
+      let repliesHtml = '';
+      if (replies.length > 0) {
+        const innerReplies = replies.map(r => {
+          const rNick = r.nickname || '陌生人';
+          const rTarget = r.reply_to_nick || r.target_nick || nick; 
+          return `
+          <div class="wish-reply">
+            <span class="r-user">${escapeHtml(rNick)}</span> 
+            <span class="r-action">回复</span> 
+            <span class="r-target">${escapeHtml(rTarget)}</span>：${escapeHtml(r.content || r.text || r.msg || '')}
+          </div>
+        `}).join('');
+        
+        repliesHtml = `
+          <div class="wish-replies-wrap" id="replies-${cid}" style="display: none;">
+            <div class="wish-replies-box">
+              <div class="wish-replies-title">全部回复 (${replies.length})</div>
+              ${innerReplies}
+            </div>
+          </div>
+        `;
+      }
+      
+      const isFeedback = (viewerMode === 'feedback');
+      let replyBtnHtml = isFeedback ? '' : `<span class="btn-reply" data-cid="${cid}" data-nick="${escapeHtml(nick)}">回复</span>`;
+
       const div = document.createElement('div'); div.className = 'wish-item';
-      const textEl = document.createElement('div'); textEl.className = 'wish-item-text';
-      textEl.textContent = item.content || item.text || item.msg || '';
-      div.appendChild(textEl);
-      const time = formatTime(item.time || item.modify || item.createtime || '');
-      if (time) { const timeEl = document.createElement('div'); timeEl.className = 'wish-item-time'; timeEl.textContent = time; div.appendChild(timeEl); }
+      div.innerHTML = `<div class="wish-item-nick">${escapeHtml(nick)}</div>
+        <div class="wish-item-text">${escapeHtml(content)}</div>
+        <div class="wish-item-time">
+          <span>${time}</span>
+          <div class="wish-item-actions">
+            ${replyBtnHtml}
+            ${replies.length ? `<span class="btn-expand" data-target="replies-${cid}">展开查看${replies.length}条回复</span>` : ''}
+          </div>
+        </div>
+        ${repliesHtml}`;
       frag.appendChild(div);
     }
     if (myToken !== viewerRenderToken) return;
     wishListContainer.appendChild(frag);
   }
+
   function resetViewerList(list) {
-    viewerRenderToken++; viewerSource = list || []; viewerCursor = 0; wishListContainer.innerHTML = '';
+    viewerRenderToken++; 
+    viewerSource = buildCommentTree(list); 
+    viewerCursor = 0; wishListContainer.innerHTML = '';
     if (!viewerSource.length) {
       wishListContainer.innerHTML = viewerMode === 'wish' ? '<div class="wish-list-empty">还没有人许愿<br>快来写下第一个心愿吧 ✦</div>' : '<div class="wish-list-empty">还没有人提出建议</div>';
       return;
     }
     appendViewerChunk();
   }
+
   wishListContainer.addEventListener('scroll', function () { if (this.scrollTop + this.clientHeight >= this.scrollHeight - 80) appendViewerChunk(); });
   viewerTabBtn.addEventListener('click', function () {
     viewerMode = viewerMode === 'wish' ? 'feedback' : 'wish';
@@ -2531,34 +2688,126 @@ async function submitFeedback() {
   wishFab.addEventListener('click', function () { if (viewerMask.classList.contains('show')) return; viewerMode = 'wish'; updateViewerHeader(); showPanelExclusive(viewerMask); loadWishList(); });
   viewerClose.addEventListener('click', () => viewerMask.classList.remove('show'));
 
+  wishListContainer.addEventListener('click', async function(e) {
+    const expandBtn = e.target.closest('.btn-expand');
+    if (expandBtn) {
+      const target = expandBtn.getAttribute('data-target');
+      const el = document.getElementById(target);
+      if (el) {
+        if (el.style.display === 'none') {
+          el.style.display = 'block';
+          expandBtn.textContent = '收起回复';
+        } else {
+          el.style.display = 'none';
+          expandBtn.textContent = expandBtn.textContent.replace('收起', '展开查看');
+        }
+      }
+      return;
+    }
+
+    const replyBtn = e.target.closest('.btn-reply');
+    if (replyBtn) {
+      const cid = replyBtn.getAttribute('data-cid');
+      const nick = replyBtn.getAttribute('data-nick');
+      const text = prompt(`回复 @${nick}：\n请输入回复内容`, '');
+      if (text && text.trim()) {
+        const postId = viewerMode === 'wish' ? POST_IDS.public : POST_IDS.feedback;
+        replyBtn.textContent = '发送中...';
+        try {
+          await apiSubmitReply(postId, cid, text.trim());
+          showToast('回复成功');
+          
+          // 本地追加 DOM，不重新加载列表，以保证滚动条不重置
+          let repliesWrap = document.getElementById('replies-' + cid);
+          if (!repliesWrap) {
+            const parentWish = replyBtn.closest('.wish-item');
+            if (parentWish) {
+              const actionsDiv = replyBtn.parentNode;
+              const expandSpan = document.createElement('span');
+              expandSpan.className = 'btn-expand';
+              expandSpan.setAttribute('data-target', 'replies-' + cid);
+              expandSpan.textContent = '收起回复';
+              actionsDiv.appendChild(expandSpan);
+              
+              repliesWrap = document.createElement('div');
+              repliesWrap.className = 'wish-replies-wrap';
+              repliesWrap.id = 'replies-' + cid;
+              repliesWrap.style.display = 'block';
+              repliesWrap.innerHTML = `
+                <div class="wish-replies-box">
+                  <div class="wish-replies-title">全部回复 (1)</div>
+                  <div class="wish-reply">
+                    <span class="r-user">陌生人</span> 
+                    <span class="r-action">回复</span> 
+                    <span class="r-target">${escapeHtml(nick)}</span>：${escapeHtml(text.trim())}
+                  </div>
+                </div>
+              `;
+              parentWish.appendChild(repliesWrap);
+            }
+          } else {
+            const box = repliesWrap.querySelector('.wish-replies-box');
+            if (box) {
+              const newReply = document.createElement('div');
+              newReply.className = 'wish-reply';
+              newReply.innerHTML = `
+                <span class="r-user">陌生人</span> 
+                <span class="r-action">回复</span> 
+                <span class="r-target">${escapeHtml(nick)}</span>：${escapeHtml(text.trim())}
+              `;
+              box.appendChild(newReply);
+              
+              const count = box.querySelectorAll('.wish-reply').length;
+              const title = box.querySelector('.wish-replies-title');
+              if (title) title.textContent = `全部回复 (${count})`;
+              
+              const expandBtn2 = document.querySelector(`.btn-expand[data-target="replies-${cid}"]`);
+              if (expandBtn2) {
+                if (repliesWrap.style.display === 'none') {
+                  expandBtn2.textContent = `展开查看${count}条回复`;
+                } else {
+                  expandBtn2.textContent = '收起回复';
+                  repliesWrap.style.display = 'block';
+                }
+              }
+            }
+          }
+          
+          if (repliesWrap.style.display === 'none') {
+            repliesWrap.style.display = 'block';
+            const expandBtn3 = document.querySelector(`.btn-expand[data-target="replies-${cid}"]`);
+            if (expandBtn3) expandBtn3.textContent = '收起回复';
+          }
+          replyBtn.textContent = '回复';
+          
+        } catch(err) {
+          showToast('回复失败');
+          replyBtn.textContent = '回复';
+        }
+      }
+    }
+  });
+
   async function loadWishList() {
     const mySeq = ++wishPoolSeq; const myVer = ++wishListVersion;
     wishListContainer.innerHTML = '<div class="wish-list-loading">加载中</div>';
     try {
-      const res = await apiGetWishes();
+      const pubList = await apiGetWishes('public');
+      const fbList = await apiGetWishes('feedback');
+      
       if (mySeq !== wishPoolSeq || myVer !== wishListVersion) return;
-      let list = [];
-      if (Array.isArray(res.list)) list = res.list;
-      else if (Array.isArray(res.data)) list = res.data;
-      else if (Array.isArray(res)) list = res;
-      cachedWishItems = []; cachedFeedbackItems = [];
-      const CHUNK = 100;
-      for (let i = 0; i < list.length; i += CHUNK) {
-        const end = Math.min(i + CHUNK, list.length);
-        for (let j = i; j < end; j++) {
-          const item = list[j];
-          const content = item.content || item.text || item.msg || '';
-          const parsed = parseWishTitle(item.title || item.name || '', content);
-          if (parsed.type === 'feedback') cachedFeedbackItems.push(item);
-          else if (parsed.type === 'secret') {}
-          else cachedWishItems.push(item);
-        }
-        if (i + CHUNK < list.length) {
-          await new Promise(r => setTimeout(r, 0));
-          if (mySeq !== wishPoolSeq || myVer !== wishListVersion) return;
-        }
-      }
-      wishPool = cachedWishItems.slice();
+      
+      cachedWishItems = pubList.filter(x => {
+        const content = x.content || x.text || x.msg || '';
+        return content.trim() !== '';
+      });
+      cachedFeedbackItems = fbList.filter(x => {
+        const content = x.content || x.text || x.msg || '';
+        return content.trim() !== '';
+      });
+      
+      // 点击流星随机展示只使用公开的一级愿望
+      wishPool = cachedWishItems.filter(isTopLevelWish);
       resetViewerList(viewerMode === 'wish' ? cachedWishItems : cachedFeedbackItems);
     } catch (e) {
       if (mySeq !== wishPoolSeq || myVer !== wishListVersion) return;
@@ -2632,7 +2881,6 @@ async function submitFeedback() {
     }
     syncInputLock(); requestAnimationFrame(syncInputLock);
     panel.classList.toggle('focused', document.activeElement === input && !isAutoTyping);
-    // 弹窗打开时同步刷新角度预览尺寸
     if (modalMaskEl && modalMaskEl.classList.contains('show')) scheduleAnglePreview();
   }
   let resizeTimer = null;
@@ -2648,7 +2896,6 @@ async function submitFeedback() {
   resize(); updateUIState(); ensureToastEl(); syncInputLock(); resetMeteors();
   updateModeBtnUI(); updateNowPlayingUI();
   requestAnimationFrame(frame);
-  // 打开页面时补传一次上次缓存的愿望
   flushOfflineWishesOnce();
   setTimeout(() => authorMask.classList.add('show'), 400);
 
@@ -2679,19 +2926,102 @@ async function submitFeedback() {
   };
 })();
 
-/* 极简模式 */
+/* 极简模式 - 纯文本，只显示许愿 */
 (function () {
   'use strict';
-  const API_BASE = 'https://yunju.99kpk.top/API/';
-  const APPID = '2153', APPKEY = '1790001700';
-  const PREFIX_SECRET = '秘密许愿', PREFIX_FEEDBACK = '反馈';
+  const LT_API = 'https://yuju.99kpk.top:81/lt/';
+  const ADMIN_USER = '3632589732';
+  const POST_IDS = {
+    'public': '1792574971',
+    'secret': '1792574987',
+    'feedback': '1792574998'
+  };
   const SV_WISH_MAX = 50;
-  function getTimeString() { const d = new Date(); const pad = n => (n < 10 ? '0' + n : '' + n); return '' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()); }
+  function fetchWithTimeout(url, options, timeout) { 
+    return new Promise((resolve, reject) => { 
+      const controller = new AbortController(); 
+      const timer = setTimeout(() => { 
+        try { controller.abort(); } catch (e) {} 
+        reject(new Error('TIMEOUT')); 
+      }, timeout || 8000); 
+      fetch(url, { signal: controller.signal, ...options }).then(res => { 
+        clearTimeout(timer); 
+        resolve(res); 
+      }).catch(err => { 
+        clearTimeout(timer); 
+        reject(err); 
+      }); 
+    }); 
+  }
+  
   function formatTime(str) { if (!str) return ''; const s = String(str).replace(/\D/g, ''); if (s.length >= 14) return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8)+' '+s.slice(8,10)+':'+s.slice(10,12)+':'+s.slice(12,14); return String(str); }
-  function fetchWithTimeout(url, timeout) { return new Promise((resolve, reject) => { const controller = new AbortController(); const timer = setTimeout(() => { try { controller.abort(); } catch (e) {} reject(new Error('TIMEOUT')); }, timeout || 8000); fetch(url, { signal: controller.signal }).then(res => { clearTimeout(timer); resolve(res); }).catch(err => { clearTimeout(timer); reject(err); }); }); }
-  // 回退用提交（正常会走主模式的离线提交）
-  async function apiSubmitWish(content, type) { const prefix = type === 'secret' ? PREFIX_SECRET : (type === 'feedback' ? PREFIX_FEEDBACK : ''); const title = prefix ? prefix + getTimeString() : getTimeString(); const qs = new URLSearchParams({ appid: APPID, key: APPKEY, title, content }); const res = await fetchWithTimeout(API_BASE + 'wd_establish.php?' + qs.toString(), 8000); return res.json(); }
-  async function apiGetWishes() { const qs = new URLSearchParams({ appid: APPID, key: APPKEY }); const res = await fetchWithTimeout(API_BASE + 'wd_list.php?' + qs.toString(), 8000); return res.json(); }
+  
+  // 核心：强化时间解析，确保倒序排序生效
+  function getTimeValue(item) {
+    if (!item) return 0;
+    let t = item.time || item.createtime || item.created_at || item.date || item.addtime || item.posttime || item.inserttime;
+    if (t) {
+      let s = String(t).trim();
+      if (/^\d+$/.test(s)) {
+        if (s.length >= 14) {
+          return new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8), +s.slice(8,10), +s.slice(10,12), +s.slice(12,14)).getTime();
+        } else if (s.length === 10) {
+          return Number(s) * 1000;
+        } else if (s.length === 13) {
+          return Number(s);
+        }
+        return Number(s);
+      }
+      let parsed = Date.parse(s.replace(/-/g, '/'));
+      if (!isNaN(parsed)) return parsed;
+    }
+    
+    // 如果没有时间或解析失败，使用 ID 作为备用排序依据（假设自增）
+    let idStr = String(item.id || item.comment_id || item.cid || '');
+    if (/^\d+$/.test(idStr)) {
+      return Number(idStr); 
+    }
+    let num = idStr.replace(/\D/g, '');
+    if (num) return Number(num);
+    
+    return 0;
+  }
+
+  async function apiSubmitWish(content, type) {
+    const postId = POST_IDS[type] || POST_IDS.public;
+    const qs = new URLSearchParams({
+      user: ADMIN_USER,
+      post_id: postId,
+      qq: '10000',
+      nickname: '许愿者',
+      content: content
+    });
+    const res = await fetchWithTimeout(LT_API + 'Comment.php', { method: 'POST', body: qs }, 8000);
+    return res.json();
+  }
+
+  async function apiGetWishes() {
+    const postId = POST_IDS.public;
+    const qs = new URLSearchParams({ user: ADMIN_USER, post_id: postId });
+    // 加上 method: 'POST' 或者兼容 GET
+    const res = await fetchWithTimeout(LT_API + 'CommentList.php?' + qs.toString(), {}, 8000);
+    if (!res.ok) throw new Error('HTTP_' + res.status);
+    const json = await res.json();
+    let list = [];
+    if (Array.isArray(json.data)) list = json.data;
+    else if (Array.isArray(json.list)) list = json.list;
+    else if (Array.isArray(json)) list = json;
+    
+    // 拿到数据立刻按时间降序排序（越晚发布越在上面）
+    list.sort((a, b) => {
+        let tA = getTimeValue(a);
+        let tB = getTimeValue(b);
+        if (tA === tB) return String(b.id || b.comment_id).localeCompare(String(a.id || a.comment_id));
+        return tB - tA;
+    });
+    return list;
+  }
+  
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   const canvas = document.getElementById('sv-sky');
@@ -2849,22 +3179,20 @@ async function submitFeedback() {
   wishInput.addEventListener('input', function () { const filtered = filterInput(this.value).slice(0, 54); if (filtered !== this.value) this.value = filtered; });
 
   submitBtn.onclick = async function () {
-    // 每次点击提交，先检查本地缓存并尝试补传
     if (window.MeteorApp && window.MeteorApp.main && window.MeteorApp.main.flushOffline) {
       try { window.MeteorApp.main.flushOffline(); } catch (e) {}
     }
     if (submitting) return;
     const wish = wishInput.value.trim();
-if (!wish) { wishInput.focus(); return; }
-let mode = getSelectedMode();
-if (mode !== 'public' && mode !== 'secret') mode = 'secret';
-submitting = true; submitBtn.disabled = true;
+    if (!wish) { wishInput.focus(); return; }
+    let mode = getSelectedMode();
+    if (mode !== 'public' && mode !== 'secret') mode = 'secret';
+    submitting = true; submitBtn.disabled = true;
     try {
       privateWishList.push(wish);
       while (privateWishList.length > SV_WISH_MAX) privateWishList.shift();
       try { localStorage.setItem("myWishList", JSON.stringify(privateWishList)); } catch (e) {}
       buildAllWishDrawItems(); tempWishItem = new TempWishItem(wish); wishInput.value = ''; playSparkleSound();
-      // 极简模式也走主模式的离线缓存提交，断网不丢
       let ok = false;
       try {
         if (window.MeteorApp && window.MeteorApp.main && window.MeteorApp.main.submitWishWithOffline) {
@@ -2874,7 +3202,29 @@ submitting = true; submitBtn.disabled = true;
           ok = true;
         }
       } catch (e) { ok = false; }
-      if (mode === 'public' && ok) { wishPoolCache = []; if (showAllWishesOnCanvas) loadWishPool(); }
+      if (mode === 'public' && ok) { 
+        if (wishListBox.classList.contains('show')) {
+          // 极简模式本地追加，不重新请求，也不改变滚动条
+          const newHtml = `
+            <div class="wish-item" style="background: rgba(100, 220, 180, 0.1);">
+              <span class="star-mark">★</span>
+              <div style="flex:1;line-height:1.5;word-break:break-word;">
+                <div style="font-size:11.5px;color:rgba(160,195,240,.85);font-weight:600;margin-bottom:3px;">许愿者</div>
+                ${escapeHtml(wish)}
+                <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;">刚刚</div>
+              </div>
+            </div>
+          `;
+          const existingItem = wishListBox.querySelector('.wish-item');
+          if (existingItem) {
+            existingItem.insertAdjacentHTML('beforebegin', newHtml);
+          } else {
+            wishListBox.innerHTML = newHtml;
+          }
+        } else {
+          wishPoolCache = []; // 未打开则清空，下次打开重新拉取
+        }
+      }
       meteorSpeedMultiplier = 2.2; meteorCount = 14;
       while (meteors.length < meteorCount) meteors.push(new Meteor());
       setTimeout(() => {
@@ -2926,6 +3276,8 @@ submitting = true; submitBtn.disabled = true;
   const wishListBtn = document.getElementById('sv-wishListBtn');
   const wishListBox = document.getElementById('sv-wishListBox');
   let wishPoolCache = [], wishPoolLoading = false, svWishSeq = 0;
+  
+  // 极简模式的许愿池，纯文本平铺，且只取一级许愿
   async function loadWishPool() {
     if (wishPoolLoading) return;
     wishPoolLoading = true;
@@ -2933,24 +3285,38 @@ submitting = true; submitBtn.disabled = true;
     wishListBox.classList.add('show');
     wishListBox.innerHTML = '<div style="text-align:center;padding:16px 8px;opacity:.6;font-size:13px;">加载中…</div>';
     try {
-      const res = await apiGetWishes();
+      const list = await apiGetWishes(); // 直接拿到数组
       if (mySeq !== svWishSeq) return;
-      let list = [];
-      if (Array.isArray(res.list)) list = res.list;
-      else if (Array.isArray(res.data)) list = res.data;
-      else if (Array.isArray(res)) list = res;
+      
+      // 过滤：只保留一级许愿，排除所有回复内容
       wishPoolCache = list.filter(item => {
-        const t = String(item.title || item.name || '').trim();
-        if (t.indexOf(PREFIX_SECRET) === 0) return false;
-        if (t.indexOf(PREFIX_FEEDBACK) === 0) return false;
-        return true;
+        if (!item) return false;
+        const content = item.content || item.text || item.msg || '';
+        if (String(content).trim() === '') return false;
+        
+        // 判断父级ID：兼容扁平与树形结构
+        let pid = String(item.parent_id || item.pid || item.reply_id || item.reply_to || item.parent || '0');
+        if (pid === 'undefined' || pid === 'null' || pid === '') pid = '0';
+        
+        // 仅保留没有父级、或者父级为0的（一级许愿）
+        return pid === '0';
       });
+      
+      // 按时间降序排序（越晚发布越在上面）
+      wishPoolCache.sort((a, b) => {
+        let tA = getTimeValue(a);
+        let tB = getTimeValue(b);
+        if (tA === tB) return String(b.id).localeCompare(String(a.id));
+        return tB - tA;
+      });
+      
       renderWishPool();
     } catch (e) {
       if (mySeq !== svWishSeq) return;
-      wishListBox.innerHTML = '<div style="text-align:center;padding:16px 8px;opacity:.6;font-size:13px;">暂时无法加载，请稍后重试</div>';
+      wishListBox.innerHTML = '<div style="text-align:center;padding:16px 8px;opacity:.6;font-size:13px;">加载失败：' + escapeHtml(e.message || String(e)) + '</div>';
     } finally { if (mySeq === svWishSeq) wishPoolLoading = false; }
   }
+
   function renderWishPool() {
     if (!wishPoolCache.length) {
       wishListBox.innerHTML = '<div style="text-align:center;padding:16px 8px;opacity:.6;font-size:13px;">许愿池还没有内容<br>快来写下第一个心愿吧 ✦</div>';
@@ -2959,22 +3325,34 @@ submitting = true; submitBtn.disabled = true;
     let html = '';
     wishPoolCache.forEach(item => {
       const text = item.content || item.text || item.msg || '';
-      const time = formatTime(item.time || item.modify || item.createtime || '');
-      html += '<div class="wish-item"><span class="star-mark">★</span><div style="flex:1;line-height:1.5;word-break:break-word;">' + escapeHtml(text) + (time ? '<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;">' + time + '</div>' : '') + '</div></div>';
+      const time = formatTime(item.time || item.createtime || item.created_at || '');
+      const nick = item.nickname || '许愿者';
+      
+      // 极简模式：单纯的列表，去掉一切回复和展开功能，左上角显示昵称
+      html += `<div class="wish-item">
+        <span class="star-mark">★</span>
+        <div style="flex:1;line-height:1.5;word-break:break-word;">
+          <div style="font-size:11.5px;color:rgba(160,195,240,.85);font-weight:600;margin-bottom:3px;">${escapeHtml(nick)}</div>
+          ${escapeHtml(text)}
+          ${time ? `<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;">${time}</div>` : ''}
+        </div>
+      </div>`;
     });
     wishListBox.innerHTML = html;
   }
+
   wishListBtn.onclick = () => {
-  if (wishListBox.classList.contains('show')) {
-    wishListBox.classList.remove('show');
-    wishPoolCache = [];
-  } else {
-    if (myWishBox) myWishBox.classList.remove('show');
-    loadWishPool();
-  }
-};
+    if (wishListBox.classList.contains('show')) {
+      wishListBox.classList.remove('show');
+      wishPoolCache = [];
+    } else {
+      if (typeof myWishBox !== 'undefined' && myWishBox) myWishBox.classList.remove('show');
+      loadWishPool();
+    }
+  };
 
 /* ===== 我的愿望：仅本地记录，可逐条删除，不动服务器 ===== */
+/* 这里不显示昵称，保持纯文本列表 */
 const myWishBtn = document.getElementById('sv-myWishBtn');
 const myWishBox = document.getElementById('sv-myWishBox');
 let svToastEl = null;
@@ -3000,6 +3378,7 @@ function renderMyWishes() {
   }
   let html = '';
   for (let i = privateWishList.length - 1; i >= 0; i--) {
+    // 我的愿望：只显示文本，不显示昵称
     html += '<div class="my-wish-item"><div class="my-wish-text">' + escapeHtml(privateWishList[i]) + '</div><button class="my-wish-del" type="button" data-my-idx="' + i + '" title="删除这条本地记录">✕</button></div>';
   }
   html += '<div class="my-wish-tip">仅删除本机记录，已提交到服务器的愿望不会被删除</div>';
